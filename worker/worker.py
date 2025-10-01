@@ -64,13 +64,17 @@ async def handle(message: aio_pika.IncomingMessage, sem: asyncio.Semaphore):
                 span.set_attribute("task.url", url)
                 dest = DATA_DIR / f"{img_id}.jpg"
                 if dest.exists():
-                    return message.ack()
+                    await message.ack()
+                    return
                 with tracer.start_as_current_span("download_transform_write"):
                     await process_image(url, dest)
-                return message.ack()
+                    await message.ack()
+                    return
+                return
             except Exception as e:
                 # Poison to DLQ (no requeue)
-                return message.reject(requeue=False)
+                await message.reject(requeue=False)
+                return
 
 async def main():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
