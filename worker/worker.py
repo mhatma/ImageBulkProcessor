@@ -15,6 +15,8 @@ DLQ         = os.getenv("DLQ", "images.dlx.q")
 ROUTING_KEY = os.getenv("ROUTING_KEY", "process_image")
 DATA_DIR    = Path(os.getenv("DATA_DIR", "/data"))
 CONCURRENCY = int(os.getenv("CONCURRENCY", "8"))
+# The default thunmbnail quality (1-95)
+DEFAULT_QUALITY = int(os.getenv("DEFAULT_QUALITY", "85"))
 
 tracer = setup_tracing("worker")
 
@@ -39,7 +41,7 @@ async def ensure_topology(channel):
     await q.bind(ex, ROUTING_KEY)
     return ex, q
 
-async def process_image(url: str, dest: Path):
+async def process_image(url: str, dest: Path, quality: int = DEFAULT_QUALITY):
     async with aiohttp.ClientSession() as session:
         async with session.get(url, timeout=aiohttp.ClientTimeout(total=30)) as resp:
             resp.raise_for_status()
@@ -48,7 +50,7 @@ async def process_image(url: str, dest: Path):
     # simple operation: thumbnail (width 400px)
     img.thumbnail((400, 400))
     out = BytesIO()
-    img.save(out, format="JPEG", quality=85)
+    img.save(out, format="JPEG", quality=quality)
     atomic_write(dest, out.getvalue())
 
 async def handle(message: aio_pika.IncomingMessage, sem: asyncio.Semaphore):
@@ -59,15 +61,19 @@ async def handle(message: aio_pika.IncomingMessage, sem: asyncio.Semaphore):
                 payload = json.loads(message.body)
                 task_id = payload["task_id"]
                 url     = payload["url"]
+                quality = payload["quality"] if "quality" in payload else DEFAULT_QUALITY
                 img_id  = payload.get("id") or "noid"
+
                 span.set_attribute("task.id", task_id)
                 span.set_attribute("task.url", url)
-                dest = DATA_DIR / f"{img_id}.jpg"
+                span.set_attribute("task.quality", quality)
+
+                dest = DATA_DIR / f"{img_id}_q{quality}.jpg"
                 if dest.exists():
                     await message.ack()
                     return
                 with tracer.start_as_current_span("download_transform_write"):
-                    await process_image(url, dest)
+                    await process_image(url, dest, quality)
                     await message.ack()
                     return
                 return

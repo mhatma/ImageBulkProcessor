@@ -1,6 +1,6 @@
 # Image Tasks POC (FastAPI + RabbitMQ + Workers + OpenTelemetry)
 
-A small, proof‑of‑concept that publishes “image processing” jobs to RabbitMQ from a FastAPI service, consumes them with asyncio workers, and emits distributed traces to Jaeger via the OpenTelemetry Collector. Runs locally via Docker Compose and can be deployed to Kubernetes (with optional KEDA autoscaling).
+A small proof‑of‑concept that publishes “image processing” jobs to RabbitMQ from a FastAPI service, consumes them with asyncio workers, and emits distributed traces to Jaeger via the OpenTelemetry Collector. Runs locally via Docker Compose and can be deployed to Kubernetes (with optional KEDA autoscaling).
 
 By default the active (and only) image processing job is creating thumbnails of random images from picsum. 
 

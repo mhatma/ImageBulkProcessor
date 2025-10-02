@@ -19,6 +19,7 @@ class ImageTask(BaseModel):
     id: Optional[int] = None
     url: str = Field(..., min_length=8)
     ops: list[str] = Field(default_factory=lambda: ["thumbnail"])
+    quality: int | None = Field(default=None, ge=1, le=95)
 
 _conn = _chan = _ex = None
 _db = None
@@ -43,7 +44,7 @@ async def healthz():
 
 async def publish(task: ImageTask):
     task_id = str(uuid.uuid4())
-    body = json.dumps({"task_id": task_id, "id": task.id, "url": task.url, "ops": task.ops}).encode()
+    body = json.dumps({"task_id": task_id, "id": task.id, "url": task.url, "ops": task.ops, "quality": task.quality}).encode()
     headers = {}
     inject(headers)  # W3C trace context
     msg = Message(body, delivery_mode=DeliveryMode.PERSISTENT, content_type="application/json",
@@ -60,13 +61,13 @@ async def enqueue_one(task: ImageTask):
         raise HTTPException(503, f"Publish failed: {e}")
 
 @app.post("/enqueue")
-async def enqueue_from_db(limit: int = Query(200, ge=1, le=1000)):
+async def enqueue_from_db(limit: int = Query(200, ge=1, le=1000), quality: int = Query(85, ge=1, le=95)):
     rows = await _db.fetch("SELECT id, url FROM images WHERE processed = FALSE LIMIT $1", limit)
     if not rows:
         return {"enqueued": 0}
     count = 0
     for r in rows:
-        await publish(ImageTask(id=r["id"], url=r["url"]))
+        await publish(ImageTask(id=r["id"], url=r["url"], quality=quality))
         count += 1
         # small yield to build backlog more smoothly (optional)
         await asyncio.sleep(0)
